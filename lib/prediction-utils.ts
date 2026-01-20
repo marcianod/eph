@@ -1,151 +1,207 @@
+import { Attack, Prediction, PredictionResult, PredictionMetadata, RawAttackInfo } from './types';
+import {
+    differenceInHours,
+    addHours,
+    startOfHour,
+    getHours,
+    addDays,
+    setHours,
+    setMinutes,
+    setSeconds,
+    setMilliseconds
+} from 'date-fns';
 
-import { Attack, Prediction } from './types';
-
-interface PredictionResult {
-    predictions: Prediction[];
-    insights: string[];
+/**
+ * Standard deviation helper
+ */
+function getStandardDeviation(array: number[], mean: number): number {
+    if (array.length <= 1) return 0;
+    const squareDiffs = array.map((value) => Math.pow(value - mean, 2));
+    const avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / array.length;
+    return Math.sqrt(avgSquareDiff);
 }
 
 export function predictNextAttack(attacks: Attack[]): PredictionResult {
-    // 1. Filter for valid data (last 30 days is handled by the caller/DB query, but good to be safe)
-    // The GAS code sorts newest first.
-    const sortedAttacks = [...attacks].sort((a, b) => b.start.getTime() - a.start.getTime());
+    const now = new Date();
+    const CLUSTER_THRESHOLD = 12;
 
-    if (sortedAttacks.length < 2) {
+    const emptyMetadata: PredictionMetadata = {
+        iats: [],
+        meanIat: 0,
+        stdDevIat: 0,
+        cv: 0,
+        regularityLabel: 'Insufficient Data',
+        hourCounts: {},
+        topHour: null,
+        attacks: []
+    };
+
+    // 1. Sort attacks chronologically (oldest to newest) for interval analysis
+    const sortedAttacks = [...attacks].sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    if (sortedAttacks.length < 3) {
         return {
             predictions: [{
-                time: new Date(Date.now() + (24 * 60 * 60 * 1000)),
-                confidence: 20,
-                type: 'cluster_start', // Fallback type
-                detail: 'Insufficient data'
+                time: addDays(startOfHour(now), 1),
+                confidence: 15,
+                type: 'cluster_start',
+                detail: 'Insufficient historical data for a robust prediction.'
             }],
-            insights: ['Limited data available']
+            insights: ['Need at least 3 attacks to calculate regularity.'],
+            metadata: emptyMetadata
         };
     }
 
-    // 2. Find clusters
-    // A cluster is defined by attacks happening within 12 hours of each other
-    const clusters: Attack[][] = [];
-    let currentCluster: Attack[] = [sortedAttacks[0]];
+    // 2. Calculate Inter-Arrival Times (IAT) in hours and map for metadata
+    const iats: number[] = [];
+    const metaAttacks: RawAttackInfo[] = [];
 
-    for (let i = 1; i < sortedAttacks.length; i++) {
-        const lastAttackInCluster = currentCluster[currentCluster.length - 1];
-        const hoursSinceLastAttack = Math.abs(sortedAttacks[i].start.getTime() - lastAttackInCluster.start.getTime()) / (1000 * 60 * 60);
+    for (let i = 0; i < sortedAttacks.length; i++) {
+        const current = sortedAttacks[i];
+        const previous = i > 0 ? sortedAttacks[i - 1] : null;
+        let iat = null;
+        let isClusterStart = true;
 
-        if (hoursSinceLastAttack > 12) {
-            // New cluster found
-            // pushed currentCluster to clusters
-            clusters.push(currentCluster);
-            currentCluster = [sortedAttacks[i]];
-        } else {
-            currentCluster.push(sortedAttacks[i]);
+        if (previous) {
+            iat = Math.abs(differenceInHours(current.start, previous.start));
+            iats.push(iat);
+            isClusterStart = iat > CLUSTER_THRESHOLD;
         }
+
+        metaAttacks.push({
+            timestamp: current.start,
+            iatHours: iat,
+            isClusterStart
+        });
     }
-    clusters.push(currentCluster);
 
-    // 3. Calculate typical intervals within clusters
-    const withinClusterIntervals: number[] = [];
-    clusters.forEach(cluster => {
-        if (cluster.length > 1) {
-            // Cluster is newest-first, so iterate backwards or just diff adjacent
-            // But logic in GAS was:
-            // for (let i = 0; i < cluster.length - 1; i++)
-            //   diff(cluster[i+1], cluster[i])
-            // Since cluster is [newest, ..., oldest], cluster[i] > cluster[i+1]
-            // so cluster[i].start - cluster[i+1].start is positive
-            for (let i = 0; i < cluster.length - 1; i++) {
-                const diffHours = Math.abs(cluster[i].start.getTime() - cluster[i + 1].start.getTime()) / (1000 * 60 * 60);
-                withinClusterIntervals.push(diffHours);
-            }
-        }
+    // 3. Statistical Analysis of Regularity (Coefficient of Variation)
+    // We filter out "Remissions" (> 14 days) from the CV calculation to avoid skewing
+    // the regularity score of the actual active phases.
+    const REMISSION_THRESHOLD = 336; // 14 days
+    const activeIats = iats.filter(iat => iat <= REMISSION_THRESHOLD);
+
+    const meanIat = activeIats.length > 0 ? activeIats.reduce((a, b) => a + b, 0) / activeIats.length : 0;
+    const stdDevIat = getStandardDeviation(activeIats, meanIat);
+
+    // CV = StdDev / Mean. Lower CV means more regular.
+    // CV < 0.5 is very regular (Periodic)
+    // CV ~ 1.0 is random (Poisson)
+    // CV > 1.0 is bursty/clustered
+    const cv = meanIat > 0 ? stdDevIat / meanIat : 1;
+    const regularityLabel = cv < 0.3 ? 'Very High' : cv < 0.6 ? 'High' : cv < 0.9 ? 'Moderate' : 'Low';
+
+    // Base confidence starts at 80, penalized by CV
+    // If CV is 0 (perfect interval), confidence is 100.
+    // If CV is 1 (random), confidence drops to ~30.
+    let regularityConfidence = Math.max(10, Math.min(100, Math.round(100 * (1 - Math.min(cv, 0.9)))));
+
+    // 4. Identify Clusters and Within-Cluster Intervals
+    // Define a cluster threshold (if attacks are < 12h apart)
+    const withinClusterIats = iats.filter(iat => iat <= CLUSTER_THRESHOLD);
+
+    const medianWithinClusterIat = withinClusterIats.length > 0
+        ? [...withinClusterIats].sort((a, b) => a - b)[Math.floor(withinClusterIats.length / 2)]
+        : 4;
+
+    // 5. Detect Diurnal Pattern (Common hour of day)
+    const hourCounts: Record<number, number> = {};
+    sortedAttacks.forEach(a => {
+        const h = getHours(a.start);
+        hourCounts[h] = (hourCounts[h] || 0) + 1;
     });
 
-    // Calculate median interval
-    let medianClusterInterval = 4; // Default
-    if (withinClusterIntervals.length > 0) {
-        withinClusterIntervals.sort((a, b) => a - b);
-        const mid = Math.floor(withinClusterIntervals.length / 2);
-        medianClusterInterval = withinClusterIntervals[mid];
-    }
+    const commonHours = Object.entries(hourCounts)
+        .sort((a, b) => b[1] - a[1])
+        .filter(entry => entry[1] > 1); // Only count hours that happen more than once
 
-    // 4. Make Predictions
+    const topHour = commonHours.length > 0 ? parseInt(commonHours[0][0]) : null;
+
+    // 6. Generate Predictions
     const predictions: Prediction[] = [];
-    const now = new Date();
-    const lastAttack = sortedAttacks[0]; // Newest
-    const hoursSinceLastAttack = Math.abs(now.getTime() - lastAttack.start.getTime()) / (1000 * 60 * 60);
+    const lastAttack = sortedAttacks[sortedAttacks.length - 1];
+    const hoursSinceLast = differenceInHours(now, lastAttack.start);
 
-    // Predict next in cluster
-    if (hoursSinceLastAttack < 12) {
-        const nextInClusterTime = new Date(lastAttack.start.getTime() + (medianClusterInterval * 60 * 60 * 1000));
-
-        if (nextInClusterTime > now) {
+    // Scenario A: Within current cluster
+    if (hoursSinceLast < CLUSTER_THRESHOLD) {
+        const nextTime = addHours(lastAttack.start, medianWithinClusterIat);
+        if (nextTime > now) {
             predictions.push({
-                time: nextInClusterTime,
-                confidence: 70,
+                time: nextTime,
+                confidence: Math.round(regularityConfidence * 0.9), // Slightly lower confidence within cluster
                 type: 'within_cluster',
-                detail: `Based on typical interval of ${Math.round(medianClusterInterval)} hours between attacks`
+                detail: `Expected next attack in cycle based on typical ${Math.round(medianWithinClusterIat)}h interval.`
             });
         }
     }
 
-    // Predict start of next cluster
-    // Cluster start times (using local time hours)
-    const clusterStartHours: Record<number, number> = {};
-    clusters.forEach(cluster => {
-        // Oldest attack in cluster is the start?
-        // Wait, GAS code: cluster[0].start.getHours()
-        // If 'cluster' is [newest, ..., oldest], then cluster[0] is the END of the cluster (most recent attack in that group)
-        // Actually, GAS code logic:
-        // let currentCluster = [attacks[0]]; (attacks is Newest First)
-        // ... currentCluster.push(attacks[i]) (older)
-        // So cluster[0] is the NEWEST attack in the cluster.
-        // But GAS code says:
-        /*
-          const clusterStartHours = clusters
-            .map(cluster => cluster[0].start.getHours())
-        */
-        // This takes the hour of the *last* attack in the cluster (chronologically last, array index 0).
-        // Is that intentional? "Start of next cluster"... maybe they mean "Time when attacks usually happen"?
-        // If a cluster is a series of attacks, usually you care about when the *first* one happens (chronologically first).
-        // If the array is Newest->Oldest, the chronological start is cluster[cluster.length-1].
-        // However, I should stick to the GAS logic effectively, unless it's clearly buggy.
-        // GAS comment: "Predict start of next cluster"
-        // Code: cluster[0].start.getHours().
-        // If my cluster is [10:00, 08:00, 06:00], cluster[0] is 10:00.
-        // I will replicate the GAS logic exactly for now.
-        const hour = cluster[0].start.getHours();
-        clusterStartHours[hour] = (clusterStartHours[hour] || 0) + 1;
-    });
+    // Scenario B: Daily recurrence (Diurnal)
+    if (topHour !== null) {
+        let diurnalTime = setHours(
+            setMinutes(
+                setSeconds(
+                    setMilliseconds(new Date(now), 0),
+                    0),
+                0),
+            topHour);
 
-    let commonStartHour = 0;
-    if (Object.keys(clusterStartHours).length > 0) {
-        const sortedHours = Object.entries(clusterStartHours).sort((a, b) => b[1] - a[1]);
-        commonStartHour = parseInt(sortedHours[0][0]);
+        if (diurnalTime <= now) {
+            diurnalTime = addDays(diurnalTime, 1);
+        }
+
+        predictions.push({
+            time: diurnalTime,
+            confidence: Math.round(regularityConfidence * (commonHours[0][1] / sortedAttacks.length + 0.3)),
+            type: 'cluster_start',
+            detail: `Pattern detected: Attacks frequently occur around ${topHour}:00.`
+        });
     }
 
-    // Predict tomorrow at commonStartHour
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(commonStartHour, 0, 0, 0);
+    // Fallback/Mean-based: Always provide if predictions are sparse or regularity is high
+    const meanTime = addHours(lastAttack.start, meanIat);
+    if (meanTime > now && (predictions.length === 0 || regularityConfidence > 50)) {
+        predictions.push({
+            time: meanTime,
+            confidence: Math.round(regularityConfidence * 0.8),
+            type: 'cluster_start',
+            detail: `Based on your average interval of ${Math.round(meanIat)} hours.`
+        });
+    }
 
-    predictions.push({
-        time: tomorrow,
-        confidence: 40,
-        type: 'cluster_start',
-        detail: `Based on common cluster start time of ${commonStartHour}:00`
-    });
+    // If still nothing (e.g. all predicted times are in the past), force a tomorrow prediction
+    if (predictions.length === 0) {
+        predictions.push({
+            time: addDays(startOfHour(now), 1),
+            confidence: 10,
+            type: 'cluster_start',
+            detail: 'Generic prediction based on daily cycle.'
+        });
+    }
 
-    // 5. Generate Insights
-    const avgAttacksPerCluster = Math.round(clusters.reduce((sum, c) => sum + c.length, 0) / clusters.length);
-
+    // 7. Generate Insights
     const insights = [
-        `Typical interval between attacks: ${Math.round(medianClusterInterval)} hours`,
-        `Most clusters start around ${commonStartHour}:00`,
-        `Average attacks per cluster: ${avgAttacksPerCluster}`
+        `Pattern Regularity: ${regularityLabel} (Variability: ${Math.round(cv * 100)}%)`,
+        `Average time between attacks: ${Math.round(meanIat)} hours.`,
     ];
 
+    if (topHour !== null) {
+        insights.push(`Most active hour: ${topHour}:00.`);
+    }
+
     return {
-        predictions: predictions.sort((a, b) => a.time.getTime() - b.time.getTime()),
-        insights
+        predictions: predictions
+            .sort((a, b) => a.time.getTime() - b.time.getTime())
+            .filter((p, i, self) => i === self.findIndex(t => t.time.getTime() === p.time.getTime())), // dedupe
+        insights,
+        metadata: {
+            iats,
+            meanIat,
+            stdDevIat,
+            cv,
+            regularityLabel,
+            hourCounts,
+            topHour,
+            attacks: metaAttacks
+        }
     };
 }

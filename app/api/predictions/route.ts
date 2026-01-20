@@ -11,15 +11,13 @@ export async function GET() {
         const db = client.db("headache-tracker");
         const collection = db.collection<Attack>("attacks");
 
-        // Calculate date 30 days ago
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        // Calculate date 18 months ago (approx 547 days)
+        const observationWindow = new Date();
+        observationWindow.setMonth(observationWindow.getMonth() - 18);
 
-        // Query: start > 30 days ago AND (end exists OR isActive)
-        // GAS logic: filter(row => row[1] && new Date(row[1]) > thirtyDaysAgo)
-        // row[1] is start.
+        // Query: start > observationWindow
         const attacks = await collection.find({
-            start: { $gt: thirtyDaysAgo }
+            start: { $gt: observationWindow }
         }).toArray();
 
         // Convert MongoDB documents to clean Attack objects and fix dates if needed

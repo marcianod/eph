@@ -22,15 +22,40 @@ export interface Prediction {
     confidence: number; // 0-100
     type: 'within_cluster' | 'cluster_start';
     detail?: string;
-    insights?: string[];
 }
 
-export type ActionType = 'start' | 'end';
+export interface RawAttackInfo {
+    timestamp: Date;
+    iatHours: number | null; // Hours from previous attack
+    isClusterStart: boolean;
+}
+
+export interface PredictionMetadata {
+    iats: number[];
+    meanIat: number;
+    stdDevIat: number;
+    cv: number;
+    regularityLabel: string;
+    hourCounts: Record<number, number>;
+    topHour: number | null;
+    attacks: RawAttackInfo[];
+}
+
+export interface PredictionResult {
+    predictions: Prediction[];
+    insights: string[];
+    metadata: PredictionMetadata;
+}
+
+export type ActionType = 'start' | 'end' | 'manual_add';
 
 export interface ActionRequest {
     action: ActionType;
     intensity?: number;
     endTime?: string; // ISO string
+    start?: string;   // For manual_add
+    end?: string;     // For manual_add
+    notes?: string;   // For manual_add
 }
 
 export interface ActionResponse {
