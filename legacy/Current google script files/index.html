@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="google" content="notranslate">
+  <title>EPH Tracker</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      background: #121212;
+      color: #ffffff;
+      min-height: 100vh;
+    }
+
+    .header-container {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .spreadsheet-link {
+      font-size: 0.7em;
+      color: #666;
+      text-decoration: none;
+      margin-left: 10px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+
+    .spreadsheet-link:hover {
+      opacity: 1;
+      color: #888;
+    }
+
+    .button {
+      width: 80%;
+      max-width: 300px;
+      padding: 20px;
+      margin: 10px;
+      border: none;
+      border-radius: 15px;
+      font-size: 1.2em;
+      color: white;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .button:active:not(.loading) {
+      transform: scale(0.95);
+    }
+
+    #startBtn {
+      background: #2e7d32;
+    }
+
+    #endBtn {
+      background: #c62828;
+    }
+
+    .intensity-container {
+      width: 80%;
+      max-width: 300px;
+      display: none;
+      gap: 10px;
+      margin: 10px 0;
+    }
+
+    #intensity {
+      flex: 1;
+      padding: 15px;
+      border: 2px solid #333;
+      border-radius: 10px;
+      background: #333;
+      color: #fff;
+      font-size: 1.1em;
+    }
+
+    #doneBtn {
+      padding: 15px;
+      background: #333;
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 1.1em;
+    }
+
+    .message {
+      padding: 15px;
+      margin: 20px;
+      border-radius: 10px;
+      display: none;
+      width: 80%;
+      text-align: center;
+    }
+
+    .success {
+      background: #1b5e20;
+      color: #a5d6a7;
+    }
+
+    .error {
+      background: #b71c1c;
+      color: #ffcdd2;
+    }
+
+    .loading {
+      cursor: not-allowed;
+      opacity: 0.7;
+      padding-right: 40px;
+      position: relative;
+    }
+
+    .loading::after {
+      content: "";
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s linear infinite;
+      transform: translateY(-50%) rotate(0deg);
+    }
+
+    @keyframes spin {
+      from {
+        transform: translateY(-50%) rotate(0deg);
+      }
+
+      to {
+        transform: translateY(-50%) rotate(360deg);
+      }
+    }
+
+    .stats-panel {
+      width: 90%;
+      max-width: 400px;
+      margin: 20px 0;
+      border-radius: 12px;
+      background: #1a1a1a;
+      padding: 15px;
+    }
+
+    .history-entry {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 15px;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+      color: #ddd;
+      font-size: 0.9em;
+      margin: 5px 0;
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 15px 0;
+    }
+
+    .preset-btn {
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #2d2d2d;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .preset-btn:hover {
+      background: #3d3d3d;
+    }
+
+    .pattern-info {
+      color: #666;
+      font-size: 0.9em;
+      margin-top: 20px;
+      padding: 15px;
+      border-top: 1px solid #333;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s linear infinite;
+      margin: 10px;
+    }
+
+    .fab-container {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      z-index: 100;
+    }
+
+    .fab {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: none;
+      background: #3949ab;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s;
+    }
+
+    .med-menu {
+      position: absolute;
+      bottom: 70px;
+      right: 0;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .med-menu button {
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      background: #2d2d2d;
+      color: white;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: #1a1a1a;
+      padding: 20px;
+      border-radius: 12px;
+      width: 300px;
+      max-width: 90%;
+    }
+
+    .modal-content h4 {
+      color: #aaa;
+      margin: 15px 0 10px 0;
+      font-size: 0.9em;
+      font-weight: normal;
+    }
+
+    .modal-content input {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      background: #333;
+      border: none;
+      border-radius: 8px;
+      color: white;
+    }
+
+    .modal-content button {
+      background: #2d2d2d;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      padding: 12px;
+      margin-top: 10px;
+      width: 100%;
+    }
+
+    .modal-content button:hover {
+      background: #3d3d3d;
+    }
+
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+      margin: -10px -10px 0 0;
+    }
+
+    .preset-btn:hover {
+      background: #3d3d3d;
+    }
+
+    .preset-btn.loading {
+      cursor: not-allowed;
+      opacity: 0.7;
+      padding-right: 35px;
+      position: relative;
+    }
+
+    .preset-btn.loading::after {
+      content: "";
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 1s linear infinite;
+      transform: translateY(-50%);
+    }
+
+    .active-attack {
+      background: rgba(46, 125, 50, 0.2);
+      border-radius: 8px;
+      padding: 12px 8px !important;
+      margin: 8px 0;
+      border-left: 3px solid #2e7d32 !important;
+    }
+
+    .running-duration {
+      color: #4caf50 !important;
+    }
+
+    .prediction-panel {
+      opacity: 0.85;
+      transition: opacity 0.2s;
+    }
+
+    .prediction-panel:hover {
+      opacity: 1;
+    }
+
+    .prediction-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .refresh-btn {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      font-size: 1.2em;
+      padding: 5px;
+      transition: transform 0.2s;
+    }
+
+    .refresh-btn:hover {
+      color: #999;
+      transform: rotate(180deg);
+    }
+
+    .refresh-btn.loading {
+      animation: spin 1s linear infinite;
+    }
+
+    .prediction-content {
+      font-size: 0.9em;
+      line-height: 1.4;
+    }
+
+    .confidence-indicator {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      margin-left: 6px;
+    }
+
+    .end-attack-panel {
+      width: 100%;
+      max-width: 300px;
+      margin: 10px auto;
+    }
+
+    .time-input-container {
+      margin: 15px 0;
+    }
+
+    .time-input-container label {
+      display: block;
+      color: #999;
+      margin-bottom: 5px;
+      font-size: 0.9em;
+    }
+
+    .time-input-container input {
+      width: 100%;
+      padding: 12px;
+      background: #2d2d2d;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 1.1em;
+    }
+
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .next-btn,
+    .confirm-btn {
+      background: #3949ab;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      width: 100%;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    .back-btn {
+      background: #2d2d2d;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+    }
+
+    .next-btn:hover,
+    .confirm-btn:hover {
+      background: #303f9f;
+    }
+
+    .back-btn:hover {
+      background: #404040;
+    }
+
+input[type="time"] {
+    color-scheme: dark;
+}
+
+input[type="time"]::-webkit-datetime-edit-hour-field,
+input[type="time"]::-webkit-datetime-edit-minute-field {
+    padding: 0;
+}
+
+input[type="time"]::-webkit-datetime-edit-ampm-field {
+    display: none;
+}
+
+input[type="time"]::-webkit-calendar-picker-indicator {
+    display: none;
+}
+
+/* For Firefox */
+input[type="time"] {
+    -moz-appearance: textfield;
+}
+
+  </style>
+</head>
+
+<body>
+
+  <div class="header-container">
+    <h1>EPH Attack Tracker <a
+        href="https://docs.google.com/spreadsheets/d/1SDTG5ZlJhaZdD5-18-t3OPw2isY5cqUCZniTE806Ddw/edit?usp=sharing"
+        target="_blank" class="spreadsheet-link">📊</a></h1>
+  </div>
+
+  <!-- Active Attack Panel -->
+  <div id="statusPanel" class="stats-panel" style="display: none;">
+    <div class="stats" id="currentStats"></div>
+  </div>
+
+  <!-- Main Buttons -->
+  <button id="startBtn" class="button" onclick="handleStart()">▶️ Start Attack</button>
+
+  <div style="width: 100%; display: flex; flex-direction: column; align-items: center;">
+    <button id="endBtn" class="button" onclick="toggleIntensity()">⏹️ End Attack</button>
+
+    <div class="end-attack-panel" style="display: none;">
+      <!-- Step 1: Intensity -->
+      <div class="intensity-step">
+        <div class="preset-grid">
+          <button class="preset-btn" onclick="handleIntensitySelect(3)">Mild (3)</button>
+          <button class="preset-btn" onclick="handleIntensitySelect(5)">Moderate (5)</button>
+          <button class="preset-btn" onclick="handleIntensitySelect(8)">Severe (8)</button>
+        </div>
+        <input type="number" id="intensity" placeholder="Custom intensity (1-10)" min="1" max="10">
+        <button class="next-btn" onclick="goToTimeStep()">Next →</button>
+      </div>
+
+      <!-- Step 2: Time -->
+      <div class="time-step" style="display: none;">
+        <div class="time-input-container">
+          <label>When did it end?</label>
+          <input type="time"
+       id="endTimeInput"
+       class="bg-gray-800 rounded p-2 w-full"
+       style="color-scheme: dark;"
+       data-format="24h">
+        </div>
+
+        <div class="preset-grid">
+          <button class="preset-btn" onclick="setTimeOffset(15)">15m ago</button>
+          <button class="preset-btn" onclick="setTimeOffset(30)">30m ago</button>
+          <button class="preset-btn" onclick="setTimeOffset(60)">1h ago</button>
+        </div>
+
+        <div class="button-group">
+          <button class="back-btn" onclick="goToIntensityStep()">← Back</button>
+          <button class="confirm-btn" onclick="handleEndAttack()">End Attack</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Medication FAB -->
+    <div class="fab-container">
+      <button class="fab" onclick="toggleMedMenu()">💊</button>
+      <div class="med-menu">
+        <button onclick="logMedication('ibuprofen')">Ibuprofen</button>
+        <button onclick="logMedication('indomethacin')">Indomethacin</button>
+        <button onclick="logMedication('custom')">Custom</button>
+      </div>
+    </div>
+
+    <!-- Medication Modal -->
+    <div id="medModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeMedModal()">&times;</span>
+        <h3>Log Medication</h3>
+
+        <div id="ibuprofenDosages" style="display: none">
+          <h4>Ibuprofen Dosages</h4>
+          <div class="preset-grid">
+            <button class="preset-btn" onclick="submitWithDosage(200, this)">200mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(400, this)">400mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(600, this)">600mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(800, this)">800mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(1000, this)">1000mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(1200, this)">1200mg</button>
+          </div>
+        </div>
+
+        <div id="indomethDosages" style="display: none">
+          <h4>Indomethacin Dosages</h4>
+          <div class="preset-grid">
+            <button class="preset-btn" onclick="submitWithDosage(25, this)">25mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(50, this)">50mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(75, this)">75mg</button>
+            <button class="preset-btn" onclick="submitWithDosage(100, this)">100mg</button>
+          </div>
+        </div>
+
+        <div id="customDosage" style="display: none">
+          <h4>Custom Dosage</h4>
+          <input type="number" id="dosage" placeholder="Custom Dosage (mg)" step="25">
+          <button onclick="submitMedication()">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="message" class="message"></div>
+
+    <!-- Attack History -->
+    <div class="stats-panel">
+      <h3>Recent Attacks</h3>
+      <div id="attackHistory"></div>
+    </div>
+
+    <div class="stats-panel prediction-panel">
+      <div class="prediction-header">
+        <h3>Prediction</h3>
+        <button onclick="refreshPrediction()" class="refresh-btn" title="Refresh prediction">
+      🔄
+    </button>
+      </div>
+      <div id="predictionContent" class="prediction-content">
+        <div style="color: #666; padding: 10px;">Loading prediction...</div>
+      </div>
+    </div>
+
+    <!-- Medication History -->
+    <div class="stats-panel">
+      <h3>Recent Medications</h3>
+      <div id="medHistory"></div>
+    </div>
+    <script>
+      function toggleIntensity() {
+        const container = document.querySelector('.intensity-container');
+        container.style.display = container.style.display === 'none' ? 'flex' : 'none';
+        if (container.style.display === 'flex') document.getElementById('intensity').focus();
+      }
+
+function handleStart() {
+    // Hide end attack panel if it's visible
+    document.querySelector('.end-attack-panel').style.display = 'none';
+    
+    // Clear any existing intensity value
+    document.getElementById('intensity').value = '';
+    
+    // Show loading state
+    const btn = document.getElementById('startBtn');
+    btn.classList.add('loading');
+    
+    // Execute the start action
+    executeAction('start');
+}
+
+      function handleEnd() {
+        const btn = document.getElementById('endBtn');
+        const intensity = document.getElementById('intensity').value;
+        btn.classList.add('loading');
+        executeAction('end', intensity);
+      }
+function loadHistory() {
+  const container = document.getElementById('attackHistory');
+  container.innerHTML = '<div class="panel-loading"><div class="loading-spinner"></div>Loading recent attacks...</div>';
+  
+  google.script.run.withSuccessHandler(history => {
+    const container = document.getElementById('attackHistory');
+    if (!history || history.length === 0) {
+      container.innerHTML = '<div style="color: #666; padding: 10px;">No recent attacks</div>';
+      return;
+    }
+    
+    const now = new Date();
+    
+    container.innerHTML = history.map(attack => {
+      const startDate = new Date(attack.start);
+      const duration = attack.isActive 
+        ? Math.round((now - startDate) / (1000 * 60))
+        : Math.round((new Date(attack.end) - startDate) / (1000 * 60));
+      
+      let timeDisplay;
+      if (startDate.toDateString() === now.toDateString()) {
+        timeDisplay = startDate.toLocaleTimeString('nl-NL', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+      } else {
+        timeDisplay = startDate.toLocaleString('nl-NL', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).replace(',', '');
+      }
+
+      // Add active indicator and dynamic duration for active attack
+      const activeClass = attack.isActive ? 'active-attack' : '';
+      const durationDisplay = attack.isActive 
+        ? `<span class="running-duration" data-start="${attack.start}">${duration}m</span>`
+        : `${duration}m`;
+
+      return `
+        <div class="history-entry ${activeClass}">
+          <span style="color: #999">${timeDisplay}</span>
+          <span style="color: #999; text-align: right">${durationDisplay}</span>
+          <span style="color: ${attack.intensity === '–' ? '#666' : '#fff'}; text-align: right">
+            ${attack.isActive ? '⚡' : attack.intensity}
+          </span>
+        </div>
+      `;
+    }).join('');
+
+    // If there's an active attack, start the duration updater
+    if (history.some(attack => attack.isActive)) {
+      startDurationUpdater();
+    }
+  }).getAttackHistory();
+}
+
+function startDurationUpdater() {
+  // Clear any existing interval
+  if (window.durationUpdater) {
+    clearInterval(window.durationUpdater);
+  }
+
+  window.durationUpdater = setInterval(() => {
+    const runningDuration = document.querySelector('.running-duration');
+    if (runningDuration) {
+      const startTime = parseInt(runningDuration.dataset.start);
+      const duration = Math.round((new Date() - startTime) / (1000 * 60));
+      runningDuration.textContent = `${duration}m`;
+    } else {
+      // If no running duration found, clear the interval
+      clearInterval(window.durationUpdater);
+    }
+  }, 60000); // Update every minute
+}
+
+      function setPreset(value) {
+        document.getElementById('intensity').value = value;
+        handleEnd();
+      }
+
+      function executeAction(action, intensity = '') {
+        const message = document.getElementById('message');
+        message.style.display = 'none';
+
+        google.script.run
+          .withSuccessHandler(res => {
+            resetButtons();
+            message.className = 'message ' + (res.success ? 'success' : 'error');
+            message.textContent = res.message;
+            message.style.display = 'block';
+            if (action === 'end') document.querySelector('.intensity-container').style.display = 'none';
+            loadHistory();
+          })
+          .withFailureHandler(err => {
+            resetButtons();
+            message.className = 'message error';
+            message.textContent = '🔴 Error: ' + err.message;
+            message.style.display = 'block';
+          })
+          .handleAction(action, intensity);
+      }
+
+      function resetButtons() {
+        document.querySelectorAll('.button').forEach(btn => btn.classList.remove('loading'));
+      }
+
+      let currentMedType = '';
+
+      function toggleMedMenu() {
+        const menu = document.querySelector('.med-menu');
+        menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+      }
+
+      function logMedication(medType) {
+        currentMedType = medType;
+        document.getElementById('medModal').style.display = 'flex';
+        
+        // Hide all dosage sections first
+        document.getElementById('ibuprofenDosages').style.display = 'none';
+        document.getElementById('indomethDosages').style.display = 'none';
+        document.getElementById('customDosage').style.display = 'none';
+        
+        // Show relevant section
+        if (medType === 'ibuprofen') {
+          document.getElementById('ibuprofenDosages').style.display = 'block';
+        } else if (medType === 'indomethacin') {
+          document.getElementById('indomethDosages').style.display = 'block';
+        } else {
+          document.getElementById('customDosage').style.display = 'block';
+        }
+      }
+
+function submitWithDosage(dosage, button) {
+    const activeAttack = getActiveAttackId();
+    
+    // Disable all preset buttons and add loading state
+    const allButtons = document.querySelectorAll('.preset-btn');
+    allButtons.forEach(btn => {
+        btn.disabled = true;
+        if (btn === button) {
+            btn.classList.add('loading');
+        }
+    });
+    
+    google.script.run
+        .withSuccessHandler(() => {
+            // Re-enable all buttons and remove loading state
+            allButtons.forEach(btn => {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+            });
+            closeMedModal();
+            showMessage(`✅ ${currentMedType} (${dosage}mg) logged`, 'success');
+            loadMedHistory();
+        })
+        .withFailureHandler(() => {
+            // Re-enable all buttons and remove loading state on error
+            allButtons.forEach(btn => {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+            });
+            showMessage('❌ Failed to log medication', 'error');
+        })
+        .logMedication(currentMedType, dosage, activeAttack);
+}
+
+      function submitMedication() {
+        const dosage = document.getElementById('dosage').value;
+        if (!dosage) return;
+        
+        const activeAttack = getActiveAttackId();
+        
+        google.script.run
+          .withSuccessHandler(() => {
+            closeMedModal();
+            showMessage(`✅ ${currentMedType} (${dosage}mg) logged`, 'success');
+            loadMedHistory();
+          })
+          .logMedication(currentMedType, dosage, activeAttack);
+      }
+
+      function showMessage(text, type) {
+        const message = document.getElementById('message');
+        message.textContent = text;
+        message.className = 'message ' + type;
+        message.style.display = 'block';
+        
+        // Hide message after 3 seconds
+        setTimeout(() => {
+          message.style.display = 'none';
+        }, 3000);
+      }
+
+      function closeMedModal() {
+        document.getElementById('medModal').style.display = 'none';
+        document.getElementById('dosage').value = '';
+      }
+
+      function getActiveAttackId() {
+        const activeAttack = document.getElementById('statusPanel').style.display === 'block';
+        return activeAttack ? document.getElementById('currentStats').dataset.rowId : null;
+      }
+
+function loadMedHistory() {
+  google.script.run.withSuccessHandler(meds => {
+    const container = document.getElementById('medHistory');
+    if (!meds || meds.length === 0) {
+      container.innerHTML = '<div style="color: #666; padding: 10px;">No recent medications</div>';
+      return;
+    }
+
+    const now = new Date();
+    
+    container.innerHTML = meds.map(med => {
+      const medTime = new Date(med.time);
+      let timeDisplay;
+      
+      if (medTime.toDateString() === now.toDateString()) {
+        timeDisplay = medTime.toLocaleTimeString('nl-NL', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+      } else {
+        timeDisplay = medTime.toLocaleString('nl-NL', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        }).replace(',', '');
+      }
+
+      return `
+        <div class="history-entry">
+          <span style="color: #999">${timeDisplay}</span>
+          <span>${med.medicine}</span>
+          <span>${med.dosage}mg</span>
+        </div>
+      `;
+    }).join('');
+  }).getRecentMeds();
+}
+      // Initialize on load
+      window.addEventListener('load', () => {
+        loadHistory();
+        loadMedHistory();
+        refreshPrediction();
+        // Check for active attack
+        google.script.run.withSuccessHandler(attack => {
+          if (attack) {
+            document.getElementById('statusPanel').style.display = 'block';
+            document.getElementById('currentStats').innerHTML = `
+              Active since: ${new Date(attack.start).toLocaleTimeString()}<br>
+              Duration: ${Math.round(attack.duration / (1000 * 60))} minutes
+            `;
+            document.getElementById('currentStats').dataset.rowId = attack.rowId;
+          }
+        }).getActiveAttack();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          document.querySelector('.intensity-container').style.display = 'none';
+          document.getElementById('medModal').style.display = 'none';
+        }
+        if (e.key === 'Enter' && document.querySelector('.intensity-container').style.display === 'flex') {
+          handleEnd();
+        }
+      });
+
+      function setDosage(dosage) {
+        document.getElementById('dosage').value = dosage;
+      }
+
+function refreshPrediction() {
+  const content = document.getElementById('predictionContent');
+  const refreshBtn = document.querySelector('.refresh-btn');
+  refreshBtn.classList.add('loading');
+
+  google.script.run
+    .withSuccessHandler(result => {
+      refreshBtn.classList.remove('loading');
+      
+      if (!result || !result.predictions || result.predictions.length === 0) {
+        content.innerHTML = `<div style="color: #666; padding: 10px;">No prediction data available</div>`;
+        return;
+      }
+
+      const now = new Date();
+
+      // Generate HTML for each prediction
+      const predictionsHtml = result.predictions.map(pred => {
+        const predDate = new Date(pred.time);
+        const hoursUntil = Math.round((predDate - now) / (1000 * 60 * 60));
+        
+        let confidenceColor;
+        if (pred.confidence >= 70) confidenceColor = '#4caf50';
+        else if (pred.confidence >= 40) confidenceColor = '#ff9800';
+        else confidenceColor = '#f44336';
+
+        let timeDisplay;
+        if (predDate.toDateString() === now.toDateString()) {
+          timeDisplay = 'today at ' + predDate.toLocaleTimeString('nl-NL', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+        } else if (predDate.toDateString() === new Date(now.getTime() + 86400000).toDateString()) {
+          timeDisplay = 'tomorrow at ' + predDate.toLocaleTimeString('nl-NL', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+        } else {
+          timeDisplay = predDate.toLocaleString('nl-NL', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          }).replace(',', ' at');
+        }
+
+        const typeIcon = pred.type === 'within_cluster' ? '⚡' : '📅';
+        const typeLabel = pred.type === 'within_cluster' ? 'Next in cluster' : 'Next cluster start';
+
+        return `
+          <div style="margin-bottom: 16px; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+            <div style="margin-bottom: 8px">
+              ${typeIcon} ${typeLabel}: ${timeDisplay}
+              <span class="confidence-indicator" style="background: ${confidenceColor}20; color: ${confidenceColor}">
+                ${pred.confidence}% confidence
+              </span>
+            </div>
+            <div style="color: #999; font-size: 0.85em">
+              ${hoursUntil > 0 ? `~${hoursUntil} hours from now` : 'Very soon'}
+            </div>
+            <div style="color: #666; font-size: 0.85em; margin-top: 4px;">
+              ${pred.detail || ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Add insights section
+      const insightsHtml = result.insights ? `
+        <div style="color: #666; margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; font-size: 0.85em">
+          ${result.insights.map(insight => `• ${insight}`).join('<br>')}
+        </div>
+      ` : '';
+
+      content.innerHTML = predictionsHtml + insightsHtml;
+    })
+    .withFailureHandler(error => {
+      refreshBtn.classList.remove('loading');
+      content.innerHTML = `<div style="color: #f44336; padding: 10px;">Error getting prediction</div>`;
+    })
+    .predictNextAttack();
+}
+
+let selectedIntensity = '';
+
+function toggleEndAttackPanel() {
+    const panel = document.querySelector('.end-attack-panel');
+    const isVisible = panel.style.display === 'block';
+    panel.style.display = isVisible ? 'none' : 'block';
+    
+    if (!isVisible) {
+        goToIntensityStep();
+        const now = new Date();
+        const hours24 = now.getHours();
+        const formattedHours = hours24.toString().padStart(2, '0');
+        const formattedMinutes = now.getMinutes().toString().padStart(2, '0');
+        document.getElementById('endTimeInput').value = `${formattedHours}:${formattedMinutes}`;
+    }
+}
+
+function handleIntensitySelect(intensity) {
+  selectedIntensity = intensity;
+  document.getElementById('intensity').value = intensity;
+  goToTimeStep();
+}
+
+function goToIntensityStep() {
+  document.querySelector('.intensity-step').style.display = 'block';
+  document.querySelector('.time-step').style.display = 'none';
+}
+
+function goToTimeStep() {
+  const intensityInput = document.getElementById('intensity');
+  const intensity = intensityInput.value;
+  
+  if (!intensity || intensity < 1 || intensity > 10) {
+    showMessage('Please enter an intensity between 1 and 10', 'error');
+    return;
+  }
+  
+  selectedIntensity = intensity;
+  document.querySelector('.intensity-step').style.display = 'none';
+  document.querySelector('.time-step').style.display = 'block';
+}
+
+function setTimeOffset(minutes) {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - minutes);
+    const hours24 = now.getHours();
+    const formattedHours = hours24.toString().padStart(2, '0');
+    const formattedMinutes = now.getMinutes().toString().padStart(2, '0');
+    document.getElementById('endTimeInput').value = `${formattedHours}:${formattedMinutes}`;
+}
+
+function handleEndAttack() {
+  const timeInput = document.getElementById('endTimeInput').value;
+  if (!timeInput) {
+    showMessage('Please select an end time', 'error');
+    return;
+  }
+  
+  // Create end time Date object
+  const [hours24, minutes] = timeInput.split(':');
+  const endTime = new Date();
+  endTime.setHours(parseInt(hours24), parseInt(minutes), 0, 0);  // Parse as integers to ensure proper 24-hour handling
+  
+  // Validate end time isn't in the future
+  if (endTime > new Date()) {
+    showMessage('End time cannot be in the future', 'error');
+    return;
+  }
+  
+  // Show loading state
+  const confirmBtn = document.querySelector('.confirm-btn');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = 'Ending...';
+  
+  // Call the server
+  google.script.run
+    .withSuccessHandler(result => {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'End Attack';
+      
+      if (result.success) {
+        toggleEndAttackPanel();
+        showMessage(result.message, 'success');
+        loadHistory();
+      } else {
+        showMessage(result.message, 'error');
+      }
+    })
+    .withFailureHandler(error => {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'End Attack';
+      showMessage('Error ending attack', 'error');
+    })
+    .handleAction('end', selectedIntensity, endTime.toISOString());
+}
+
+// Update your existing button click handler
+function toggleIntensity() {
+  toggleEndAttackPanel();
+}
+
+    </script>
+</body>
+
+</html>
